@@ -1,0 +1,16 @@
+{
+  "name": "foaap-engine-public",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Stateful context engine with explicit contradictions, claim lineage, semantic evidence and versioned persistence.",
+  "type": "module",
+  "scripts": {
+    "dev": "node --env-file-if-exists=.env server.js",
+    "test": "node --test test/*.test.mjs mcp/test/*.test.mjs",
+    "test:core": "node --test test/*.test.mjs",
+    "demo": "node examples/state-walkthrough.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
