@@ -1,0 +1,127 @@
+diff --git a/src/components/atelier/AtelierStage.jsx b/src/components/atelier/AtelierStage.jsx
+index 7d6b47d..1b89392 100644
+--- a/src/components/atelier/AtelierStage.jsx
++++ b/src/components/atelier/AtelierStage.jsx
+@@ -27,6 +27,7 @@
+ // =============================================================================
+ 
+ import React, { useCallback, useEffect, useRef, useState } from "react";
++import { hydrateConversationRecord } from "../../lib/conversation-records";
+ import {
+   HelpCircle,
+   Plus,
+@@ -969,7 +970,7 @@ const AtelierStage = React.forwardRef(function AtelierStage(
+     setShowJumpPill(false);
+     setMessages((ms) => [...ms, userMsg, assistantMsg]);
+     setInput("");
+-    appendConversation(`node:${nodeId}`, { role: "user", content: text });
++    appendConversation(`node:${nodeId}`, userMsg);
+     setStreaming(true);
+ 
+     // Skills — domain-specific taste files matched to THIS turn's intent +
+@@ -1157,11 +1158,8 @@ const AtelierStage = React.forwardRef(function AtelierStage(
+     setTimeout(() => {
+       setMessages((ms) => {
+         const me = ms.find((m) => m.id === assistantId);
+-        if (me && me.content) {
+-          appendConversation(`node:${nodeId}`, {
+-            role: "assistant",
+-            content: me.content,
+-          });
++        if (me && (me.content || me.status === "errored" || me.status === "stopped")) {
++          appendConversation(`node:${nodeId}`, me);
+         }
+         // Push the just-finished pair into the shared split-messages store
+         // so the OTHER pane (when split is open) sees it on its next turn.
+@@ -1390,11 +1388,8 @@ const AtelierStage = React.forwardRef(function AtelierStage(
+     setTimeout(() => {
+       setMessages((ms) => {
+         const me = ms.find((m) => m.id === assistantId);
+-        if (me && me.content) {
+-          appendConversation(`node:${nodeId}`, {
+-            role: "assistant",
+-            content: me.content,
+-          });
++        if (me && (me.content || me.status === "errored" || me.status === "stopped")) {
++          appendConversation(`node:${nodeId}`, me);
+         }
+         return ms;
+       });
+@@ -2506,11 +2501,7 @@ function loadInitialMessages(nodeId, activeSessionId) {
+   return conv
+     .filter((m) => m.role === "user" || m.role === "assistant")
+     .map((m, i) => ({
+-      id: `hist_${i}_${m.ts || 0}`,
+-      role: m.role,
++      ...hydrateConversationRecord(m, i),
+       content: m.role === "assistant" ? stripTags(m.content) : m.content,
+-      status: "complete",
+-      startedAt: m.ts || Date.now(),
+-      completedAt: m.ts || Date.now(),
+     }));
+ }
+diff --git a/src/lib/memory.js b/src/lib/memory.js
+index 385d794..c40e285 100644
+--- a/src/lib/memory.js
++++ b/src/lib/memory.js
+@@ -61,6 +61,7 @@ import {
+ import { pushSubstrate } from './substrate-client';
+ import { mergeVentureModels } from './memory-merge';
+ import { vaultHas } from './secret-vault';
++import { conversationRecord, upsertConversationRecord } from './conversation-records';
+ 
+ function fireSubstrate(payload) {
+   try {
+@@ -1600,14 +1601,9 @@ export function linkCreamCardToSubnode(creamCardId, pillarKey, nodeId) {
+ // thread that may exist for the same node.
+ export function appendConversation(channel, msg) {
+   const mem = read();
+-  const entry = { role: msg.role, content: msg.content, ts: now() };
+-  // Optional toolCalls — preserved when present so dispatch_build status
+-  // cards (and other tool-bound UI) survive a page reload.
+-  if (Array.isArray(msg.toolCalls) && msg.toolCalls.length > 0) {
+-    entry.toolCalls = msg.toolCalls;
+-  }
++  const entry = conversationRecord(msg, { now });
+   if (channel === 'intake') {
+-    mem.conversations.intake.push(entry);
++    upsertConversationRecord(mem.conversations.intake, entry);
+   } else if (channel.startsWith('node:')) {
+     const id = channel.slice(5);
+     if (!mem.conversations.nodes[id]) mem.conversations.nodes[id] = [];
+@@ -1628,12 +1624,12 @@ export function appendConversation(channel, msg) {
+       };
+     }
+     entry.sessionId = mem.session_pointer[id];
+-    mem.conversations.nodes[id].push(entry);
++    upsertConversationRecord(mem.conversations.nodes[id], entry);
+   } else if (channel.startsWith('studio:')) {
+     if (!mem.conversations.studios) mem.conversations.studios = {};
+     const id = channel.slice(7);
+     if (!mem.conversations.studios[id]) mem.conversations.studios[id] = [];
+-    mem.conversations.studios[id].push(entry);
++    upsertConversationRecord(mem.conversations.studios[id], entry);
+   } else {
+     throw new Error(`appendConversation: unknown channel "${channel}"`);
+   }
+diff --git a/src/pages/Memory.jsx b/src/pages/Memory.jsx
+index 5e39ae4..d3d0343 100644
+--- a/src/pages/Memory.jsx
++++ b/src/pages/Memory.jsx
+@@ -42,6 +42,7 @@
+ //  Pre-auth fallback: localStorage cache, used until the founder signs in.
+ // =============================================================================
+ 
++import { countLabel } from "../lib/conversation-records";
+ import React, { useEffect, useMemo, useState } from "react";
+ import { getArtifactAssetUrl } from "@/lib/storage";
+ import { useNavigate } from "react-router-dom";
+@@ -1038,7 +1039,7 @@ function MemoryCockpit({ mem, synth }) {
+             {stateLine}
+           </div>
+           <div style={{ fontFamily: FONT.sans, fontSize: 13, fontWeight: 500, color: COLOR.textOnDarkMuted, marginTop: 8, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+-            <span>{capturesTotal} captures · {(mem.decisions || []).length} decisions · {pillars.reduce((s, p) => s + (activated[p.key] || []).length, 0)} subnodes active</span>
++            <span>{countLabel(capturesTotal, "capture")} · {countLabel((mem.decisions || []).length, "decision")} · {countLabel(pillars.reduce((s, p) => s + (activated[p.key] || []).length, 0), "subnode")} active</span>
+             {baseline && <DeltaChip current={coherence} baseline={baseline.coherence} />}
+           </div>
+         </div>
