@@ -1,0 +1,15 @@
+{
+  "name": "foaap-mcp",
+  "version": "0.3.0",
+  "description": "FOAAP MCP server — truth-memory and contradiction-catching for any MCP agent (Claude Code, Cursor, Claude Desktop)",
+  "type": "module",
+  "bin": { "foaap-mcp": "./index.mjs" },
+  "main": "index.mjs",
+  "files": ["index.mjs", "README.md"],
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  },
+  "overrides": {
+    "@hono/node-server": "^2.0.11"
+  }
+}
