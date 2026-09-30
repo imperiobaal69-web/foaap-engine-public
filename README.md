@@ -34,7 +34,7 @@ The demo adds two conflicting launch commitments, records an explicit verdict, s
 | Two clients save conflicting versions | A row lock and caller-supplied base version turn stale writes into explicit conflicts. | [Postgres persistence contract](supabase/engine-schema.sql) |
 | An agent depends on undocumented API behavior | An MCP client speaks to an isolated mock API through the SDK transport. | [MCP implementation](mcp/index.mjs), [contract test](mcp/test/api-contract.test.mjs) |
 
-The current suite has **29 tests**: 20 original core tests, seven message-persistence regression tests, one portfolio-walkthrough test and one MCP contract test containing multiple request/response assertions. The contract test exercises the client against a mock API; it is not a deployment or database integration test.
+The current suite has **32 tests**: 23 core tests, seven message-persistence regression tests, one portfolio-walkthrough test and one MCP contract test containing multiple request/response assertions. Judge regressions cover duplicate, missing and invalid pair IDs, plus correct mapping of reordered verdicts. The contract test exercises the client against a mock API; it is not a deployment or database integration test.
 
 ## The flow
 

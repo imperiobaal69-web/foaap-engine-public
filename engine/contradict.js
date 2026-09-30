@@ -123,10 +123,23 @@ export async function judgePairs({ existing, fresh, apiKey = HOUSE_KEY }) {
       throw new Error(`judge batch ${Math.floor(offset / MAX_PAIRS_PER_CALL) + 1} returned ${verdicts.length}/${batch.length} verdicts; no partial judgment was accepted`);
     }
 
+    // Equal length alone can hide an omitted pair behind a duplicate verdict.
+    // Validate the whole batch before using it: unique, in-range integer IDs
+    // plus the exact count guarantee that every requested pair is represented.
+    const seenPairs = new Set();
     for (const v of verdicts) {
-      const idx = (v.pair || 0) - 1;
-      const pair = batch[idx];
-      if (!pair) continue;
+      const pairId = v?.pair;
+      if (!Number.isInteger(pairId) || pairId < 1 || pairId > batch.length) {
+        throw new Error(`judge batch ${Math.floor(offset / MAX_PAIRS_PER_CALL) + 1} returned invalid pair ID ${JSON.stringify(pairId)}; expected an integer from 1 to ${batch.length}; no partial judgment was accepted`);
+      }
+      if (seenPairs.has(pairId)) {
+        throw new Error(`judge batch ${Math.floor(offset / MAX_PAIRS_PER_CALL) + 1} returned duplicate pair ID ${pairId}; no partial judgment was accepted`);
+      }
+      seenPairs.add(pairId);
+    }
+
+    for (const v of verdicts) {
+      const pair = batch[v.pair - 1];
       const relation = v.relation || (v.contradiction ? "contradicts" : "unrelated");
       const confidence = Math.round((v.confidence || 0) * 100) / 100;
       const why = String(v.why || v.explanation || "").trim() || null;
